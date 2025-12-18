@@ -2,53 +2,70 @@
 import SwiftUI
 
 struct PracticeView: View {
-    let sport: SportType
     @EnvironmentObject var viewModel: SightWordsViewModel
+    let sport: SportType
 
     @State private var sportRounds: [SightWordRound] = []
     @State private var currentIndex: Int = 0
-    @State private var feedbackText: String = ""
-    @State private var feedbackIcon: String = ""
 
-    private var currentRound: SightWordRound? {
-        guard currentIndex >= 0, currentIndex < sportRounds.count else { return nil }
-        return sportRounds[currentIndex]
-    }
+    @State private var showResult: Bool = false
+    @State private var resultIsCorrect: Bool = false
+
+    @State private var confettiTrigger: Int = 0
+    @State private var showSummary: Bool = false
+
+    @State private var mascotBump: Bool = false
+
+    private let roundsPerSession: Int = 10
 
     var body: some View {
-        VStack(spacing: 16) {
+        ZStack {
+            SportBackgroundView(sport: sport)
+                .ignoresSafeArea()
 
-            HStack {
-                Text("\(sport.displayName) Practice")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(Color("SSText", bundle: nil))
-                Spacer()
-            }
+            VStack(spacing: 14) {
 
-            HStack(spacing: 14) {
-                StatPill(title: "Score", value: "\(viewModel.score)")
-                StatPill(title: "Streak", value: "\(viewModel.streak)")
-                Spacer()
-            }
+                // Header with mascot icon + title
+                HStack(spacing: 12) {
+                    Image(iconAssetName)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 56, height: 56)
+                        .scaleEffect(mascotBump ? 1.12 : 1.0)
+                        .animation(.spring(response: 0.22, dampingFraction: 0.45), value: mascotBump)
+                        .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 4)
 
-            if let round = currentRound {
-                VStack(spacing: 14) {
-                    Text(round.promptWord)
-                        .font(.system(size: 56, weight: .black))
-                        .foregroundColor(Color("SSText", bundle: nil))
-                        .padding(.top, 8)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Stadium Sight Words")
+                            .font(.title2.weight(.heavy))
+                            .foregroundColor(.white)
 
-                    if !feedbackText.isEmpty {
-                        HStack(spacing: 8) {
-                            Image(systemName: feedbackIcon)
-                            Text(feedbackText)
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(Color("SSText", bundle: nil))
-                        .padding(.bottom, 4)
+                        Text("\(sport.displayName) Practice")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white.opacity(0.92))
                     }
+
+                    Spacer()
+                }
+                .padding(.top, 8)
+
+                HStack(spacing: 10) {
+                    StatChip(title: "Score", value: "\(viewModel.score)")
+                    StatChip(title: "Streak", value: "\(viewModel.streak)")
+                    StatChip(title: "Round", value: "\(roundNumberText)")
+                }
+                .padding(.top, 6)
+
+                Spacer(minLength: 10)
+
+                if let round = currentRound {
+                    Text(round.promptWord)
+                        .font(.system(size: 76, weight: .heavy, design: .rounded))
+                        .minimumScaleFactor(0.35)
+                        .lineLimit(1)
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.30), radius: 12, x: 0, y: 8)
+                        .padding(.horizontal)
 
                     VStack(spacing: 12) {
                         ForEach(round.options, id: \.self) { option in
@@ -56,88 +73,172 @@ struct PracticeView: View {
                                 handleTap(option, round: round)
                             } label: {
                                 Text(option)
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .frame(maxWidth: .infinity, minHeight: 60)
+                                    .font(.title2.weight(.bold))
+                                    .foregroundColor(Color.black.opacity(0.85))
+                                    .frame(maxWidth: .infinity, minHeight: 66)
+                                    .background(.white.opacity(0.95))
+                                    .cornerRadius(18)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 18)
+                                            .stroke(Color.white.opacity(0.7), lineWidth: 1)
+                                    )
+                                    .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 6)
                             }
                             .buttonStyle(.plain)
-                            .background(Color("SSCard", bundle: nil))
-                            .cornerRadius(14)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
-                            )
-                            .foregroundColor(Color("SSText", bundle: nil))
+                            .disabled(showResult)
                         }
                     }
-                }
-            } else {
-                Text("No rounds found for \(sport.displayName).")
-                    .foregroundColor(Color("SSText", bundle: nil))
-                Text("Check that sightwords.json is in Copy Bundle Resources and has items for this sport.")
-                    .font(.footnote)
-                    .foregroundColor(Color("SSText", bundle: nil))
-                    .multilineTextAlignment(.center)
-            }
+                    .padding(.horizontal)
 
-            Spacer()
+                    if showResult {
+                        Text(resultIsCorrect ? "GOAL!" : "Try again")
+                            .font(.headline.weight(.heavy))
+                            .foregroundColor(.white)
+                            .padding(.top, 6)
+                            .transition(.opacity)
+                    }
+
+                } else {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Loading words…")
+                            .font(.headline)
+                            .foregroundColor(.white.opacity(0.9))
+                    }
+                    .padding()
+                }
+
+                Spacer(minLength: 10)
+
+                Button {
+                    showSummary = true
+                } label: {
+                    Text("End Session")
+                        .font(.headline.weight(.bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .background(.black.opacity(0.35))
+                        .cornerRadius(14)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                        )
+                }
+                .padding(.bottom, 10)
+            }
+            .frame(maxWidth: 760)
+            .padding()
+
+            ConfettiBurstView(trigger: confettiTrigger)
         }
-        .padding()
-        .background(Color("SSBackground", bundle: nil).ignoresSafeArea())
-        .navigationTitle("Practice")
         .onAppear {
-            viewModel.resetSession()
-            sportRounds = viewModel.rounds(for: sport)
-            currentIndex = 0
-            feedbackText = ""
-            feedbackIcon = ""
+            startSession()
+        }
+        .sheet(isPresented: $showSummary) {
+            ParentSessionSummaryView(
+                sport: sport,
+                score: viewModel.score,
+                totalAnswered: viewModel.totalAnswered,
+                correctCount: viewModel.correctCount,
+                incorrectCount: viewModel.incorrectCount,
+                accuracyPercent: viewModel.accuracyPercent,
+                bestStreak: viewModel.bestStreak,
+                onStartNewSession: {
+                    showSummary = false
+                    startSession()
+                }
+            )
         }
     }
 
-    private func handleTap(_ selected: String, round: SightWordRound) {
-        let correct = viewModel.submitAnswer(selected, for: round)
+    private func startSession() {
+        viewModel.resetSession()
+        sportRounds = Array(viewModel.rounds(for: sport).shuffled().prefix(roundsPerSession))
+        currentIndex = 0
+        showResult = false
+        resultIsCorrect = false
+        mascotBump = false
+    }
 
-        if correct {
-            feedbackText = "Goal!"
-            feedbackIcon = "checkmark.circle.fill"
-        } else {
-            feedbackText = "Try again next one!"
-            feedbackIcon = "xmark.circle.fill"
+    private func handleTap(_ option: String, round: SightWordRound) {
+        let isCorrect = viewModel.submitAnswer(option, for: round)
+
+        resultIsCorrect = isCorrect
+        withAnimation(.easeInOut(duration: 0.15)) {
+            showResult = true
         }
 
-        // Move to next round after a short pause
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            feedbackText = ""
-            feedbackIcon = ""
-            currentIndex += 1
-            if currentIndex >= sportRounds.count {
-                currentIndex = 0
+        if isCorrect {
+            SoundFX.correct()
+            confettiTrigger += 1
+
+            mascotBump = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                mascotBump = false
             }
+        } else {
+            SoundFX.incorrect()
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                showResult = false
+            }
+
+            if isCorrect {
+                goNext()
+            }
+        }
+    }
+
+    private func goNext() {
+        guard !sportRounds.isEmpty else { return }
+        currentIndex += 1
+        if currentIndex >= sportRounds.count {
+            showSummary = true
+        }
+    }
+
+    private var currentRound: SightWordRound? {
+        guard !sportRounds.isEmpty else { return nil }
+        guard currentIndex >= 0 && currentIndex < sportRounds.count else { return nil }
+        return sportRounds[currentIndex]
+    }
+
+    private var roundNumberText: String {
+        guard !sportRounds.isEmpty else { return "0" }
+        return "\(min(currentIndex + 1, sportRounds.count))/\(sportRounds.count)"
+    }
+
+    private var iconAssetName: String {
+        switch sport {
+        case .soccer: return "soccer_icon"
+        case .basketball: return "basketball_icon"
+        case .football: return "football_icon"
         }
     }
 }
 
-private struct StatPill: View {
+private struct StatChip: View {
     let title: String
     let value: String
 
     var body: some View {
         VStack(spacing: 2) {
             Text(title)
-                .font(.caption)
-                .foregroundColor(Color("SSText", bundle: nil).opacity(0.8))
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.white.opacity(0.95))
             Text(value)
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(Color("SSText", bundle: nil))
+                .font(.headline.weight(.heavy))
+                .foregroundColor(.white)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color("SSCard", bundle: nil))
-        .cornerRadius(12)
+        .frame(width: 80, height: 56)
+        .background(.black.opacity(0.25))
+        .cornerRadius(14)
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.white.opacity(0.25), lineWidth: 1)
         )
     }
 }
