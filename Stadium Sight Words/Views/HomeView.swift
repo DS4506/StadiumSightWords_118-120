@@ -7,110 +7,155 @@ struct HomeView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                KidStadiumBackground()
+                // Kid-friendly gradient background
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.35, green: 0.70, blue: 1.00), // sky blue
+                        Color(red: 0.55, green: 0.42, blue: 0.95), // purple
+                        Color(red: 1.00, green: 0.62, blue: 0.55)  // peach
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                // Subtle playful sparkle overlay
+                SparkleOverlay()
+                    .ignoresSafeArea()
+                    .opacity(0.18)
 
                 VStack(spacing: 18) {
 
-                    VStack(spacing: 6) {
-                        Text("Stadium Sight Words")
-                            .font(.largeTitle)
-                            .fontWeight(.heavy)
+                    // Headline area with better spacing + style
+                    VStack(spacing: 10) {
+                        Text("Stadium")
+                            .font(.system(size: 42, weight: .heavy, design: .rounded))
                             .foregroundColor(.white)
+                            .shadow(radius: 6)
+
+                        Text("Sight Words")
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .shadow(radius: 6)
 
                         Text("Pick a sport and score points by reading!")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.9))
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.95))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(.white.opacity(0.18))
+                            .clipShape(Capsule())
+                    }
+                    .padding(.top, 20)
+
+                    VStack(spacing: 14) {
+                        ForEach(SportType.allCases) { sport in
+                            NavigationLink {
+                                PracticeView(sport: sport)
+                                    .environmentObject(viewModel)
+                            } label: {
+                                SportCard(sport: sport)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                     .padding(.top, 10)
 
-                    VStack(spacing: 14) {
-                        sportLink(title: "Soccer Practice", iconAssetName: "soccer_icon", sport: .soccer)
-                        sportLink(title: "Basketball Practice", iconAssetName: "basketball_icon", sport: .basketball)
-                        sportLink(title: "Football Practice", iconAssetName: "football_icon", sport: .football)
-                    }
-                    .padding(.top, 6)
-
-                    Spacer(minLength: 0)
+                    Spacer()
 
                     Text("Tip: Short sessions win. 5 minutes is plenty.")
-                        .font(.subheadline)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundColor(.white.opacity(0.85))
-                        .padding(.bottom, 10)
+                        .padding(.bottom, 18)
                 }
-                .padding()
-                .frame(maxWidth: 620) // keeps iPad from looking too stretched
+                .padding(.horizontal, 18)
             }
+            .navigationBarHidden(true)
         }
-        .navigationViewStyle(StackNavigationViewStyle())
-    }
-
-    private func sportLink(title: String, iconAssetName: String, sport: SportType) -> some View {
-        NavigationLink(destination: PracticeView(sport: sport)) {
-            HStack(spacing: 14) {
-                Image(iconAssetName)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 56, height: 56)
-                    .padding(.leading, 6)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .foregroundColor(Color.black.opacity(0.85))
-
-                    Text("Tap to start")
-                        .font(.subheadline)
-                        .foregroundColor(Color.black.opacity(0.55))
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.headline)
-                    .foregroundColor(Color.black.opacity(0.35))
-                    .padding(.trailing, 6)
-            }
-            .padding(.vertical, 14)
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity)
-            .background(.white.opacity(0.92))
-            .cornerRadius(18)
-            .overlay(
-                RoundedRectangle(cornerRadius: 18)
-                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 6)
-        }
-        .buttonStyle(.plain)
+        .navigationViewStyle(.stack)
     }
 }
 
-private struct KidStadiumBackground: View {
+// MARK: - Sport Card
+
+private struct SportCard: View {
+    let sport: SportType
+    @State private var bounce = false
+
     var body: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.35, green: 0.75, blue: 1.00),  // sky blue
-                Color(red: 0.63, green: 0.45, blue: 1.00),  // purple pop
-                Color(red: 1.00, green: 0.55, blue: 0.55)   // warm glow
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+        HStack(spacing: 14) {
+            // Your icon images from Assets.xcassets
+            Image(sport.assetIconName)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 44, height: 44)
+                .scaleEffect(bounce ? 1.06 : 1.00)
+                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: bounce)
+                .onAppear { bounce = true }
 
-        // soft “stadium lights” glow
-        RadialGradient(
-            colors: [Color.white.opacity(0.22), Color.clear],
-            center: .top,
-            startRadius: 10,
-            endRadius: 420
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(sport.displayName) Practice")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(Color.black.opacity(0.85))
+
+                Text("Tap to start")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(Color.black.opacity(0.55))
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(Color.black.opacity(0.35))
+        }
+        .padding(.vertical, 14)
+        .padding(.horizontal, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.white.opacity(0.90))
         )
-        .ignoresSafeArea()
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(.white.opacity(0.55), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 6)
+        .contentShape(Rectangle())
+        .accessibilityLabel("\(sport.displayName) Practice")
     }
 }
 
-#Preview {
-    HomeView()
-        .environmentObject(SightWordsViewModel())
+// MARK: - Sparkle Overlay
+
+private struct SparkleOverlay: View {
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 120))
+                    .foregroundColor(.white)
+                    .position(x: geo.size.width * 0.18, y: geo.size.height * 0.18)
+
+                Image(systemName: "star.fill")
+                    .font(.system(size: 22))
+                    .foregroundColor(.white)
+                    .position(x: geo.size.width * 0.85, y: geo.size.height * 0.25)
+
+                Image(systemName: "star.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white)
+                    .position(x: geo.size.width * 0.78, y: geo.size.height * 0.12)
+
+                Image(systemName: "sparkle")
+                    .font(.system(size: 26))
+                    .foregroundColor(.white)
+                    .position(x: geo.size.width * 0.20, y: geo.size.height * 0.70)
+
+                Image(systemName: "sparkles")
+                    .font(.system(size: 90))
+                    .foregroundColor(.white)
+                    .position(x: geo.size.width * 0.82, y: geo.size.height * 0.80)
+            }
+        }
+    }
 }

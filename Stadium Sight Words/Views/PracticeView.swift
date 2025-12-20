@@ -2,243 +2,213 @@
 import SwiftUI
 
 struct PracticeView: View {
-    @EnvironmentObject var viewModel: SightWordsViewModel
+    @EnvironmentObject private var vm: SightWordsViewModel
+    @Environment(\.dismiss) private var dismiss
+
     let sport: SportType
 
-    @State private var sportRounds: [SightWordRound] = []
-    @State private var currentIndex: Int = 0
-
-    @State private var showResult: Bool = false
-    @State private var resultIsCorrect: Bool = false
-
+    @State private var index: Int = 0
+    @State private var showPromptWord: Bool = true
+    @State private var isRevealing: Bool = true
     @State private var confettiTrigger: Int = 0
-    @State private var showSummary: Bool = false
 
-    @State private var mascotBump: Bool = false
+    // Memory timer (1 second)
+    private let revealSeconds: Double = 1.0
 
-    private let roundsPerSession: Int = 10
+    private var sportRounds: [SightWordRound] {
+        vm.rounds(for: sport)
+    }
+
+    private var currentRound: SightWordRound? {
+        guard index >= 0, index < sportRounds.count else { return nil }
+        return sportRounds[index]
+    }
 
     var body: some View {
         ZStack {
+            // Your sport background view (already created in your project)
             SportBackgroundView(sport: sport)
                 .ignoresSafeArea()
 
             VStack(spacing: 14) {
+                header
 
-                // Header with mascot icon + title
-                HStack(spacing: 12) {
-                    Image(iconAssetName)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 56, height: 56)
-                        .scaleEffect(mascotBump ? 1.12 : 1.0)
-                        .animation(.spring(response: 0.22, dampingFraction: 0.45), value: mascotBump)
-                        .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 4)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Stadium Sight Words")
-                            .font(.title2.weight(.heavy))
-                            .foregroundColor(.white)
-
-                        Text("\(sport.displayName) Practice")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundColor(.white.opacity(0.92))
-                    }
-
-                    Spacer()
-                }
-                .padding(.top, 8)
-
-                HStack(spacing: 10) {
-                    StatChip(title: "Score", value: "\(viewModel.score)")
-                    StatChip(title: "Streak", value: "\(viewModel.streak)")
-                    StatChip(title: "Round", value: "\(roundNumberText)")
-                }
-                .padding(.top, 6)
+                statsRow
 
                 Spacer(minLength: 10)
 
-                if let round = currentRound {
-                    Text(round.promptWord)
-                        .font(.system(size: 76, weight: .heavy, design: .rounded))
-                        .minimumScaleFactor(0.35)
-                        .lineLimit(1)
-                        .foregroundColor(.white)
-                        .shadow(color: .black.opacity(0.30), radius: 12, x: 0, y: 8)
-                        .padding(.horizontal)
+                promptArea
 
-                    VStack(spacing: 12) {
-                        ForEach(round.options, id: \.self) { option in
-                            Button {
-                                handleTap(option, round: round)
-                            } label: {
-                                Text(option)
-                                    .font(.title2.weight(.bold))
-                                    .foregroundColor(Color.black.opacity(0.85))
-                                    .frame(maxWidth: .infinity, minHeight: 66)
-                                    .background(.white.opacity(0.95))
-                                    .cornerRadius(18)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 18)
-                                            .stroke(Color.white.opacity(0.7), lineWidth: 1)
-                                    )
-                                    .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 6)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(showResult)
-                        }
-                    }
-                    .padding(.horizontal)
+                optionsArea
 
-                    if showResult {
-                        Text(resultIsCorrect ? "GOAL!" : "Try again")
-                            .font(.headline.weight(.heavy))
-                            .foregroundColor(.white)
-                            .padding(.top, 6)
-                            .transition(.opacity)
-                    }
-
-                } else {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Loading words…")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.9))
-                    }
-                    .padding()
-                }
-
-                Spacer(minLength: 10)
-
-                Button {
-                    showSummary = true
-                } label: {
-                    Text("End Session")
-                        .font(.headline.weight(.bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 12)
-                        .background(.black.opacity(0.35))
-                        .cornerRadius(14)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                        )
-                }
-                .padding(.bottom, 10)
+                Spacer(minLength: 14)
             }
-            .frame(maxWidth: 760)
-            .padding()
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
 
+            // Confetti overlay (your ConfettiBurstView file should already exist)
             ConfettiBurstView(trigger: confettiTrigger)
+                .allowsHitTesting(false)
+        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .bold))
+                        .padding(10)
+                        .background(Circle().fill(Color.white.opacity(0.85)))
+                }
+            }
         }
         .onAppear {
-            startSession()
+            vm.resetSession()
+            index = 0
+            startRevealTimer()
         }
-        .sheet(isPresented: $showSummary) {
-            ParentSessionSummaryView(
-                sport: sport,
-                score: viewModel.score,
-                totalAnswered: viewModel.totalAnswered,
-                correctCount: viewModel.correctCount,
-                incorrectCount: viewModel.incorrectCount,
-                accuracyPercent: viewModel.accuracyPercent,
-                bestStreak: viewModel.bestStreak,
-                onStartNewSession: {
-                    showSummary = false
-                    startSession()
+        .onChange(of: index) { _ in
+            startRevealTimer()
+        }
+    }
+
+    private var header: some View {
+        VStack(spacing: 4) {
+            Text("\(sport.displayName) Practice")
+                .font(.system(size: 26, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+                .shadow(radius: 6)
+
+            Text("Watch the word. Then pick it from memory.")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.92))
+        }
+        .padding(.top, 6)
+    }
+
+    private var statsRow: some View {
+        HStack(spacing: 10) {
+            statChip(title: "Score", value: "\(vm.score)")
+            statChip(title: "Streak", value: "\(vm.streak)")
+            statChip(title: "Round", value: "\(min(index + 1, max(sportRounds.count, 1)))")
+        }
+        .padding(.top, 8)
+    }
+
+    private func statChip(title: String, value: String) -> some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.black.opacity(0.6))
+            Text(value)
+                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .foregroundStyle(Color.black.opacity(0.8))
+        }
+        .frame(width: 72, height: 54)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.9)))
+        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 4)
+    }
+
+    private var promptArea: some View {
+        Group {
+            if let round = currentRound {
+                VStack(spacing: 10) {
+                    Text(showPromptWord ? round.promptWord : " ")
+                        .font(.system(size: 56, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color.white)
+                        .shadow(radius: 8)
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(1)
+
+                    Text(isRevealing ? "Look closely…" : "Now choose!")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.9))
                 }
-            )
-        }
-    }
-
-    private func startSession() {
-        viewModel.resetSession()
-        sportRounds = Array(viewModel.rounds(for: sport).shuffled().prefix(roundsPerSession))
-        currentIndex = 0
-        showResult = false
-        resultIsCorrect = false
-        mascotBump = false
-    }
-
-    private func handleTap(_ option: String, round: SightWordRound) {
-        let isCorrect = viewModel.submitAnswer(option, for: round)
-
-        resultIsCorrect = isCorrect
-        withAnimation(.easeInOut(duration: 0.15)) {
-            showResult = true
-        }
-
-        if isCorrect {
-            SoundFX.correct()
-            confettiTrigger += 1
-
-            mascotBump = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                mascotBump = false
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.white.opacity(0.12))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                )
+            } else {
+                Text("No rounds found for \(sport.displayName).")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding()
             }
+        }
+    }
+
+    private var optionsArea: some View {
+        VStack(spacing: 12) {
+            if let round = currentRound {
+                ForEach(round.options, id: \.self) { option in
+                    Button {
+                        // Only allow answering after the reveal finishes
+                        guard !isRevealing else { return }
+
+                        let correct = vm.submitAnswer(option, for: round)
+
+                        if correct {
+                            confettiTrigger += 1
+                        }
+
+                        // Move to next round
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                            nextRound()
+                        }
+                    } label: {
+                        Text(option)
+                            .font(.system(size: 18, weight: .heavy, design: .rounded))
+                            .foregroundStyle(Color.black.opacity(0.85))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.white.opacity(isRevealing ? 0.55 : 0.92))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                            )
+                            .shadow(color: Color.black.opacity(0.10), radius: 8, x: 0, y: 5)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRevealing)
+                }
+            }
+        }
+        .padding(.top, 6)
+    }
+
+    private func startRevealTimer() {
+        showPromptWord = true
+        isRevealing = true
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + revealSeconds) {
+            // Hide the prompt word after 1 second
+            showPromptWord = false
+            isRevealing = false
+        }
+    }
+
+    private func nextRound() {
+        if index + 1 < sportRounds.count {
+            index += 1
         } else {
-            SoundFX.incorrect()
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                showResult = false
-            }
-
-            if isCorrect {
-                goNext()
-            }
-        }
-    }
-
-    private func goNext() {
-        guard !sportRounds.isEmpty else { return }
-        currentIndex += 1
-        if currentIndex >= sportRounds.count {
-            showSummary = true
-        }
-    }
-
-    private var currentRound: SightWordRound? {
-        guard !sportRounds.isEmpty else { return nil }
-        guard currentIndex >= 0 && currentIndex < sportRounds.count else { return nil }
-        return sportRounds[currentIndex]
-    }
-
-    private var roundNumberText: String {
-        guard !sportRounds.isEmpty else { return "0" }
-        return "\(min(currentIndex + 1, sportRounds.count))/\(sportRounds.count)"
-    }
-
-    private var iconAssetName: String {
-        switch sport {
-        case .soccer: return "soccer_icon"
-        case .basketball: return "basketball_icon"
-        case .football: return "football_icon"
+            // End of rounds: you can present ParentSessionSummaryView here if you want.
+            // For now, just go back to home.
+            dismiss()
         }
     }
 }
 
-private struct StatChip: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundColor(.white.opacity(0.95))
-            Text(value)
-                .font(.headline.weight(.heavy))
-                .foregroundColor(.white)
-        }
-        .frame(width: 80, height: 56)
-        .background(.black.opacity(0.25))
-        .cornerRadius(14)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.25), lineWidth: 1)
-        )
-    }
+#Preview {
+    PracticeView(sport: .soccer)
+        .environmentObject(SightWordsViewModel())
 }

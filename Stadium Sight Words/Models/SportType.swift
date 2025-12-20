@@ -16,7 +16,16 @@ enum SportType: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    // Safer SF Symbols (less likely to be missing)
+    // Your Assets.xcassets image names (must match exactly)
+    var assetIconName: String {
+        switch self {
+        case .soccer: return "soccer_icon"
+        case .basketball: return "basketball_icon"
+        case .football: return "football_icon"
+        }
+    }
+
+    // Optional: SF Symbols fallback (if you ever need it)
     var iconName: String {
         switch self {
         case .soccer: return "sportscourt"
