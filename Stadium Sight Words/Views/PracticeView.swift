@@ -1,214 +1,341 @@
 
+//  PracticeView.swift
+//  Stadium Sight Words
+
 import SwiftUI
+import AVFoundation
+import AudioToolbox
 
 struct PracticeView: View {
+    let sport: SportType
+
     @EnvironmentObject private var vm: SightWordsViewModel
     @Environment(\.dismiss) private var dismiss
 
-    let sport: SportType
+    // Rounds for this sport
+    @State private var sportRounds: [SightWordRound] = []
+    @State private var currentIndex: Int = 0
 
-    @State private var index: Int = 0
-    @State private var showPromptWord: Bool = true
-    @State private var isRevealing: Bool = true
+    // Memory mode (prompt visible briefly, then hidden)
+    @State private var isPromptVisible: Bool = true
+    private let promptVisibleSeconds: Double = 1.5
+
+    // Confetti
     @State private var confettiTrigger: Int = 0
 
-    // Memory timer (1 second)
-    private let revealSeconds: Double = 1.0
+    // End-of-session summary
+    @State private var showSummary: Bool = false
 
-    private var sportRounds: [SightWordRound] {
-        vm.rounds(for: sport)
-    }
+    // Speech (no @StateObject needed)
+    private let speech = SpeechManager()
+
+    // Prevent double taps while transitioning
+    @State private var isAcceptingInput: Bool = true
 
     private var currentRound: SightWordRound? {
-        guard index >= 0, index < sportRounds.count else { return nil }
-        return sportRounds[index]
+        guard currentIndex >= 0, currentIndex < sportRounds.count else { return nil }
+        return sportRounds[currentIndex]
     }
 
     var body: some View {
         ZStack {
-            // Your sport background view (already created in your project)
             SportBackgroundView(sport: sport)
                 .ignoresSafeArea()
 
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 header
-
                 statsRow
 
-                Spacer(minLength: 10)
+                Spacer(minLength: 12)
 
                 promptArea
-
                 optionsArea
 
-                Spacer(minLength: 14)
+                Spacer(minLength: 12)
             }
             .padding(.horizontal, 18)
-            .padding(.top, 10)
+            .padding(.top, 18)
+            .padding(.bottom, 18)
 
-            // Confetti overlay (your ConfettiBurstView file should already exist)
             ConfettiBurstView(trigger: confettiTrigger)
                 .allowsHitTesting(false)
         }
         .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .bold))
-                        .padding(10)
-                        .background(Circle().fill(Color.white.opacity(0.85)))
-                }
-            }
-        }
         .onAppear {
-            vm.resetSession()
-            index = 0
-            startRevealTimer()
+            setupSession()
         }
-        .onChange(of: index) { _ in
-            startRevealTimer()
+        .sheet(isPresented: $showSummary) {
+            SessionSummarySheet(
+                sportName: sport.displayName,
+                score: vm.score,
+                totalAnswered: vm.totalAnswered,
+                correctCount: vm.correctCount,
+                incorrectCount: vm.incorrectCount,
+                accuracyPercent: vm.accuracyPercent,
+                bestStreak: vm.bestStreak,
+                onDone: { dismiss() },
+                onStartNewSession: {
+                    vm.resetSession()
+                    currentIndex = 0
+                    showSummary = false
+                    startRound()
+                }
+            )
         }
     }
 
-    private var header: some View {
-        VStack(spacing: 4) {
-            Text("\(sport.displayName) Practice")
-                .font(.system(size: 26, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
-                .shadow(radius: 6)
+    // MARK: - UI Pieces
 
-            Text("Watch the word. Then pick it from memory.")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.92))
+    private var header: some View {
+        HStack(spacing: 12) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .padding(10)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(sport.displayName) Practice")
+                    .font(.title3.weight(.heavy))
+                    .foregroundStyle(.white)
+
+                Text("Listen, remember, then choose the right word.")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+
+            Spacer()
+
+            Button {
+                speakCurrentPrompt()
+            } label: {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .padding(10)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .accessibilityLabel("Hear the sight word")
         }
-        .padding(.top, 6)
     }
 
     private var statsRow: some View {
-        HStack(spacing: 10) {
-            statChip(title: "Score", value: "\(vm.score)")
-            statChip(title: "Streak", value: "\(vm.streak)")
-            statChip(title: "Round", value: "\(min(index + 1, max(sportRounds.count, 1)))")
+        HStack(spacing: 12) {
+            StatPill(title: "Score", value: "\(vm.score)")
+            StatPill(title: "Streak", value: "\(vm.streak)")
+            StatPill(title: "Round", value: "\(min(currentIndex + 1, max(sportRounds.count, 1)))")
         }
-        .padding(.top, 8)
-    }
-
-    private func statChip(title: String, value: String) -> some View {
-        VStack(spacing: 2) {
-            Text(title)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(Color.black.opacity(0.6))
-            Text(value)
-                .font(.system(size: 18, weight: .heavy, design: .rounded))
-                .foregroundStyle(Color.black.opacity(0.8))
-        }
-        .frame(width: 72, height: 54)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.9)))
-        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 4)
     }
 
     private var promptArea: some View {
-        Group {
-            if let round = currentRound {
-                VStack(spacing: 10) {
-                    Text(showPromptWord ? round.promptWord : " ")
-                        .font(.system(size: 56, weight: .heavy, design: .rounded))
-                        .foregroundStyle(Color.white)
-                        .shadow(radius: 8)
-                        .minimumScaleFactor(0.5)
-                        .lineLimit(1)
-
-                    Text(isRevealing ? "Look closely…" : "Now choose!")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.9))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 18)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.white.opacity(0.12))
-                )
+        ZStack {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(.white.opacity(0.20), lineWidth: 1)
                 )
-            } else {
-                Text("No rounds found for \(sport.displayName).")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+
+            VStack(spacing: 10) {
+                Text(isPromptVisible ? (currentRound?.promptWord ?? "") : " ")
+                    .font(.system(size: 54, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
-                    .padding()
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .padding(.horizontal, 14)
+
+                Text(isPromptVisible ? "Look fast..." : "Now pick from memory!")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.85))
             }
+            .padding(.vertical, 18)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 150)
     }
 
     private var optionsArea: some View {
         VStack(spacing: 12) {
-            if let round = currentRound {
-                ForEach(round.options, id: \.self) { option in
-                    Button {
-                        // Only allow answering after the reveal finishes
-                        guard !isRevealing else { return }
-
-                        let correct = vm.submitAnswer(option, for: round)
-
-                        if correct {
-                            confettiTrigger += 1
-                        }
-
-                        // Move to next round
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-                            nextRound()
-                        }
-                    } label: {
+            ForEach(currentRound?.options ?? [], id: \.self) { option in
+                Button {
+                    handleSelection(option)
+                } label: {
+                    HStack {
                         Text(option)
-                            .font(.system(size: 18, weight: .heavy, design: .rounded))
-                            .foregroundStyle(Color.black.opacity(0.85))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.white.opacity(isRevealing ? 0.55 : 0.92))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
-                            )
-                            .shadow(color: Color.black.opacity(0.10), radius: 8, x: 0, y: 5)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(.black.opacity(0.85))
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isRevealing)
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.white.opacity(0.92))
+                    )
                 }
+                .disabled(!isAcceptingInput || currentRound == nil)
             }
         }
-        .padding(.top, 6)
     }
 
-    private func startRevealTimer() {
-        showPromptWord = true
-        isRevealing = true
+    // MARK: - Session Flow
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + revealSeconds) {
-            // Hide the prompt word after 1 second
-            showPromptWord = false
-            isRevealing = false
+    private func setupSession() {
+        sportRounds = vm.rounds(for: sport)
+        vm.resetSession()
+        currentIndex = 0
+        showSummary = false
+        startRound()
+    }
+
+    private func startRound() {
+        guard currentRound != nil else {
+            showSummary = true
+            return
+        }
+
+        isAcceptingInput = true
+        isPromptVisible = true
+
+        // Speak immediately
+        speakCurrentPrompt()
+
+        // Hide after 1.5 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + promptVisibleSeconds) {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                isPromptVisible = false
+            }
         }
     }
 
-    private func nextRound() {
-        if index + 1 < sportRounds.count {
-            index += 1
+    private func speakCurrentPrompt() {
+        guard let word = currentRound?.promptWord, !word.isEmpty else { return }
+        speech.speak(word)
+    }
+
+    private func handleSelection(_ selected: String) {
+        guard isAcceptingInput, let round = currentRound else { return }
+        isAcceptingInput = false
+
+        let isCorrect = vm.submitAnswer(selected, for: round)
+
+        if isCorrect {
+            confettiTrigger += 1
+            AudioServicesPlaySystemSound(1057)
         } else {
-            // End of rounds: you can present ParentSessionSummaryView here if you want.
-            // For now, just go back to home.
-            dismiss()
+            AudioServicesPlaySystemSound(1053)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            currentIndex += 1
+            startRound()
         }
     }
 }
 
-#Preview {
-    PracticeView(sport: .soccer)
-        .environmentObject(SightWordsViewModel())
+// MARK: - Small Components
+
+private struct StatPill: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.85))
+            Text(value)
+                .font(.headline.weight(.heavy))
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(.white.opacity(0.18), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Speech Manager (no ObservableObject needed)
+
+final class SpeechManager {
+    private let synth = AVSpeechSynthesizer()
+
+    func speak(_ text: String) {
+        synth.stopSpeaking(at: .immediate)
+
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.rate = 0.45
+        utterance.pitchMultiplier = 1.1
+        utterance.postUtteranceDelay = 0.05
+        utterance.voice = AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
+
+        synth.speak(utterance)
+    }
+}
+
+// MARK: - Summary Sheet
+
+private struct SessionSummarySheet: View {
+    let sportName: String
+    let score: Int
+    let totalAnswered: Int
+    let correctCount: Int
+    let incorrectCount: Int
+    let accuracyPercent: Int
+    let bestStreak: Int
+
+    let onDone: () -> Void
+    let onStartNewSession: () -> Void
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                Text("Session Summary")
+                    .font(.title2.weight(.heavy))
+
+                Text("\(sportName) Practice")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+
+                VStack(spacing: 10) {
+                    row("Score", "\(score)")
+                    row("Answered", "\(totalAnswered)")
+                    row("Correct", "\(correctCount)")
+                    row("Incorrect", "\(incorrectCount)")
+                    row("Accuracy", "\(accuracyPercent)%")
+                    row("Best Streak", "\(bestStreak)")
+                }
+                .padding()
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                HStack(spacing: 12) {
+                    Button("Done") { onDone() }
+                        .buttonStyle(.bordered)
+
+                    Button("Start New Session") { onStartNewSession() }
+                        .buttonStyle(.borderedProminent)
+                }
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Parents")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func row(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title).foregroundStyle(.secondary)
+            Spacer()
+            Text(value).font(.headline.weight(.bold))
+        }
+    }
 }
