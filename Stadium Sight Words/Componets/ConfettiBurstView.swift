@@ -1,5 +1,6 @@
 
 import SwiftUI
+import AudioToolbox
 
 struct ConfettiBurstView: View {
     let trigger: Int
@@ -32,6 +33,9 @@ struct ConfettiBurstView: View {
     }
 
     private func launchConfetti() {
+        // Sound + haptic-like system audio (works without adding files)
+        AudioServicesPlaySystemSound(1108)
+
         let colors: [Color] = [.red, .orange, .yellow, .green, .mint, .teal, .blue, .purple, .pink]
         let shapes: [ConfettiShapeType] = [.circle, .rectangle, .star]
 
@@ -97,7 +101,7 @@ private struct ConfettiPiece: Identifiable {
     let delay: Double
 }
 
-// MARK: - Shape wrapper (fixes "some Shape" switch return issue)
+// MARK: - Shape wrapper
 private struct ConfettiShape: Shape {
     let type: ConfettiShapeType
 
@@ -113,7 +117,6 @@ private struct ConfettiShape: Shape {
     }
 }
 
-// Simple star shape
 private struct StarShape: Shape {
     let points: Int
     let innerRatio: CGFloat

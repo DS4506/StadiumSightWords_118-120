@@ -1,161 +1,172 @@
 
+
+//  HomeView.swift
+//  Stadium Sight Words
+//
+
 import SwiftUI
 
 struct HomeView: View {
-    @EnvironmentObject var viewModel: SightWordsViewModel
+
+    private let columns: [GridItem] = [
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16)
+    ]
 
     var body: some View {
         NavigationView {
             ZStack {
-                // Kid-friendly gradient background
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(red: 0.35, green: 0.70, blue: 1.00), // sky blue
-                        Color(red: 0.55, green: 0.42, blue: 0.95), // purple
-                        Color(red: 1.00, green: 0.62, blue: 0.55)  // peach
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-
-                // Subtle playful sparkle overlay
-                SparkleOverlay()
+                HomeBackgroundView()
                     .ignoresSafeArea()
-                    .opacity(0.18)
 
-                VStack(spacing: 18) {
+                VStack(spacing: 14) {
+                    header
 
-                    // Headline area with better spacing + style
-                    VStack(spacing: 10) {
-                        Text("Stadium")
-                            .font(.system(size: 42, weight: .heavy, design: .rounded))
-                            .foregroundColor(.white)
-                            .shadow(radius: 6)
-
-                        Text("Sight Words")
-                            .font(.system(size: 34, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                            .shadow(radius: 6)
-
-                        Text("Pick a sport and score points by reading!")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white.opacity(0.95))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(.white.opacity(0.18))
-                            .clipShape(Capsule())
-                    }
-                    .padding(.top, 20)
-
-                    VStack(spacing: 14) {
+                    LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(SportType.allCases) { sport in
-                            NavigationLink {
-                                PracticeView(sport: sport)
-                                    .environmentObject(viewModel)
-                            } label: {
-                                SportCard(sport: sport)
+                            NavigationLink(destination: PracticeView(sport: sport)) {
+                                SportTile(
+                                    title: "\(sport.displayName) Practice",
+                                    subtitle: "Tap to start",
+                                    assetName: assetName(for: sport)
+                                )
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.top, 10)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
 
                     Spacer()
 
                     Text("Tip: Short sessions win. 5 minutes is plenty.")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.85))
-                        .padding(.bottom, 18)
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .padding(.bottom, 12)
                 }
-                .padding(.horizontal, 18)
+                .padding(.top, 8)
             }
             .navigationBarHidden(true)
         }
         .navigationViewStyle(.stack)
     }
+
+    private var header: some View {
+        VStack(spacing: 10) {
+            Text("Stadium")
+                .font(.system(size: 44, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.top, 8)
+
+            Text("Sight Words")
+                .font(.system(size: 34, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+
+            Text("Pick a sport and score points by reading!")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.9))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+    }
+
+    // Uses YOUR asset names from Assets.xcassets
+    private func assetName(for sport: SportType) -> String {
+        switch sport {
+        case .soccer: return "soccer_icon"
+        case .basketball: return "basketball_icon"
+        case .football: return "football_icon"
+        }
+    }
 }
 
-// MARK: - Sport Card
+// MARK: - Square tile
 
-private struct SportCard: View {
-    let sport: SportType
+private struct SportTile: View {
+    let title: String
+    let subtitle: String
+    let assetName: String
+
     @State private var bounce = false
 
     var body: some View {
-        HStack(spacing: 14) {
-            // Your icon images from Assets.xcassets
-            Image(sport.assetIconName)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 44, height: 44)
-                .scaleEffect(bounce ? 1.06 : 1.00)
-                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: bounce)
-                .onAppear { bounce = true }
+        ZStack {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.92))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 6)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(sport.displayName) Practice")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundColor(Color.black.opacity(0.85))
+            VStack(spacing: 10) {
+                Image(assetName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 74, height: 74)
+                    .scaleEffect(bounce ? 1.06 : 1.0)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.55), value: bounce)
 
-                Text("Tap to start")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundColor(Color.black.opacity(0.55))
+                Text(title)
+                    .font(.headline.weight(.heavy))
+                    .foregroundStyle(.black.opacity(0.85))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 10)
+
+                Text(subtitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.black.opacity(0.55))
             }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(Color.black.opacity(0.35))
+            .padding(14)
         }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.white.opacity(0.90))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.white.opacity(0.55), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 6)
-        .contentShape(Rectangle())
-        .accessibilityLabel("\(sport.displayName) Practice")
+        .aspectRatio(1, contentMode: .fit) // makes each card a square
+        .onAppear {
+            bounce = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                bounce = false
+            }
+        }
     }
 }
 
-// MARK: - Sparkle Overlay
+// MARK: - Background
 
-private struct SparkleOverlay: View {
+private struct HomeBackgroundView: View {
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 120))
-                    .foregroundColor(.white)
-                    .position(x: geo.size.width * 0.18, y: geo.size.height * 0.18)
+        LinearGradient(
+            colors: [
+                Color(red: 0.35, green: 0.52, blue: 0.96),
+                Color(red: 0.50, green: 0.35, blue: 0.95),
+                Color(red: 0.96, green: 0.55, blue: 0.68)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(StarsOverlay().opacity(0.25))
+    }
+}
 
-                Image(systemName: "star.fill")
-                    .font(.system(size: 22))
-                    .foregroundColor(.white)
-                    .position(x: geo.size.width * 0.85, y: geo.size.height * 0.25)
+private struct StarsOverlay: View {
+    var body: some View {
+        ZStack {
+            Image(systemName: "sparkles")
+                .font(.system(size: 220))
+                .foregroundStyle(.white)
+                .offset(x: -120, y: -120)
 
-                Image(systemName: "star.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(.white)
-                    .position(x: geo.size.width * 0.78, y: geo.size.height * 0.12)
+            Image(systemName: "sparkles")
+                .font(.system(size: 180))
+                .foregroundStyle(.white)
+                .offset(x: 130, y: 220)
 
-                Image(systemName: "sparkle")
-                    .font(.system(size: 26))
-                    .foregroundColor(.white)
-                    .position(x: geo.size.width * 0.20, y: geo.size.height * 0.70)
-
-                Image(systemName: "sparkles")
-                    .font(.system(size: 90))
-                    .foregroundColor(.white)
-                    .position(x: geo.size.width * 0.82, y: geo.size.height * 0.80)
-            }
+            Image(systemName: "sparkles")
+                .font(.system(size: 120))
+                .foregroundStyle(.white)
+                .offset(x: -60, y: 260)
         }
     }
 }
+
