@@ -8,8 +8,8 @@ enum KeychainService {
     static func save(_ value: String, service: String, account: String) -> Bool {
         guard let data = value.data(using: .utf8) else { return false }
 
-        // Delete old item if it exists
-        delete(service: service, account: account)
+        // Remove any existing item first
+        _ = delete(service: service, account: account)
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
