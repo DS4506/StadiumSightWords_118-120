@@ -8,27 +8,33 @@ struct PracticeView: View {
 
     @EnvironmentObject private var viewModel: SightWordsViewModel
     @EnvironmentObject private var scoreStore: ScoreStore
+    @EnvironmentObject private var settings: SettingsStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var sportRounds: [SightWordRound] = []
     @State private var currentIndex: Int = 0
 
     // Memory mode
-    @State private var isPromptVisible: Bool = true
+    @State private var isPromptVisible: Bool = false
     @State private var isLocked: Bool = true
-    private let promptVisibleSeconds: Double = 1.5
 
-    // Confetti trigger (increment to re-fire)
+    // Confetti trigger
     @State private var confettiTrigger: Int = 0
 
-    // End-of-session summary
+    // Summary
     @State private var showSummary: Bool = false
 
-    // Selection (lock after tap until next round)
+    // Prevent early start / repeated start
+    @State private var didStart: Bool = false
+
+    // Selection lock
     @State private var selectedOption: String? = nil
 
     // Text-to-speech
     private let synthesizer = AVSpeechSynthesizer()
+
+    // ✅ Uses selected difficulty (Easy/Normal/Hard)
+    private var promptVisibleSeconds: Double { settings.difficulty.secondsVisible }
 
     private let nextRoundDelay: Double = 0.7
 
@@ -44,12 +50,9 @@ struct PracticeView: View {
 
     var body: some View {
         ZStack {
-            // If your project uses SportBackgroundView, keep this.
-            // If not, replace with your background view.
             SportBackgroundView(sport: sport)
                 .ignoresSafeArea()
 
-            // Your ConfettiBurstView signature is trigger-only
             ConfettiBurstView(trigger: confettiTrigger)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
@@ -92,10 +95,13 @@ struct PracticeView: View {
             }
         }
         .onAppear {
-            startSession()
+            // ✅ Start ONLY after the screen is actually visible
+            if !didStart {
+                didStart = true
+                startSessionAfterScreenShows()
+            }
         }
         .sheet(isPresented: $showSummary) {
-            // ✅ FIX: pass sport: sport
             ParentSessionSummaryView(
                 sport: sport,
                 score: viewModel.score,
@@ -105,8 +111,8 @@ struct PracticeView: View {
                 accuracyPercent: viewModel.accuracyPercent,
                 bestStreak: viewModel.bestStreak,
                 onStartNewSession: {
-                    startSession()
                     showSummary = false
+                    restartSession()
                 }
             )
         }
@@ -136,6 +142,10 @@ struct PracticeView: View {
                 }
                 .accessibilityLabel("Hear the word")
             }
+
+            Text("Difficulty: \(settings.difficulty.displayName) (\(promptVisibleSeconds, specifier: "%.1f")s)")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.85))
         }
         .padding(.horizontal, 18)
         .padding(.top, 6)
@@ -171,7 +181,7 @@ struct PracticeView: View {
                 )
 
             VStack(spacing: 10) {
-                Text("Memorize the word")
+                Text("Listen + Look")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.92))
 
@@ -189,7 +199,7 @@ struct PracticeView: View {
                         .animation(.easeInOut(duration: 0.25), value: isPromptVisible)
                 }
 
-                Text(isLocked ? "Watch and listen!" : "Now pick it from memory!")
+                Text(isLocked ? "Get ready…" : "Now pick it from memory!")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.92))
             }
@@ -212,27 +222,17 @@ struct PracticeView: View {
                 Button {
                     choose(option, round: round)
                 } label: {
-                    optionTile(title: option, isSelected: selectedOption == option, correctness: correctnessForOption(option))
+                    optionTile(title: option)
                 }
                 .disabled(isLocked || selectedOption != nil)
             }
         }
     }
 
-    private func optionTile(title: String, isSelected: Bool, correctness: Bool?) -> some View {
-        let bg: AnyShapeStyle = {
-            if let correctness {
-                return correctness ? AnyShapeStyle(Color.green.opacity(0.75))
-                                 : AnyShapeStyle(Color.red.opacity(0.75))
-            }
-            return AnyShapeStyle(Color.white.opacity(0.92))
-        }()
-
-        let fg: Color = (correctness == nil) ? .black.opacity(0.85) : .white
-
-        return ZStack {
+    private func optionTile(title: String) -> some View {
+        ZStack {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(bg)
+                .fill(Color.white.opacity(0.92))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(.black.opacity(0.08), lineWidth: 1)
@@ -240,32 +240,31 @@ struct PracticeView: View {
 
             Text(title)
                 .font(.title3.weight(.heavy))
-                .foregroundStyle(fg)
+                .foregroundStyle(.black.opacity(0.85))
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
                 .padding(.horizontal, 10)
         }
         .frame(height: 78)
-        .scaleEffect(isSelected ? 0.98 : 1)
-        .animation(.spring(response: 0.25, dampingFraction: 0.78), value: isSelected)
     }
 
-    private func correctnessForOption(_ option: String) -> Bool? {
-        guard selectedOption != nil else { return nil }
-        guard let round = currentRound else { return nil }
-        if option == round.correctWord { return true }
-        if option == selectedOption { return false }
-        return nil
-    }
+    // MARK: - Session timing (fixed)
 
-    // MARK: - Flow
-
-    private func startSession() {
+    private func startSessionAfterScreenShows() {
         viewModel.resetSession()
         sportRounds = viewModel.rounds(for: sport).shuffled()
         currentIndex = 0
         selectedOption = nil
-        startMemoryTimerForCurrentRound()
+
+        // ✅ Delay so navigation transition finishes BEFORE audio
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            startMemoryTimerForCurrentRound()
+        }
+    }
+
+    private func restartSession() {
+        didStart = true
+        startSessionAfterScreenShows()
     }
 
     private func startMemoryTimerForCurrentRound() {
@@ -275,8 +274,10 @@ struct PracticeView: View {
         isPromptVisible = true
         selectedOption = nil
 
+        // Speak AFTER the screen appears
         speakCurrentWord()
 
+        // Hide after difficulty time
         DispatchQueue.main.asyncAfter(deadline: .now() + promptVisibleSeconds) {
             withAnimation(.easeInOut(duration: 0.25)) {
                 isPromptVisible = false
@@ -287,7 +288,6 @@ struct PracticeView: View {
 
     private func speakCurrentWord() {
         guard let round = currentRound else { return }
-
         synthesizer.stopSpeaking(at: .immediate)
 
         let utterance = AVSpeechUtterance(string: round.promptWord)
@@ -321,7 +321,14 @@ struct PracticeView: View {
 
         if currentIndex + 1 < sportRounds.count {
             currentIndex += 1
-            startMemoryTimerForCurrentRound()
+
+            // Smooth reset into next round
+            isPromptVisible = false
+            isLocked = true
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                startMemoryTimerForCurrentRound()
+            }
         } else {
             endSessionAndShowSummary()
         }

@@ -7,8 +7,6 @@ enum KeychainService {
     @discardableResult
     static func save(_ value: String, service: String, account: String) -> Bool {
         guard let data = value.data(using: .utf8) else { return false }
-
-        // Remove any existing item first
         _ = delete(service: service, account: account)
 
         let query: [String: Any] = [
@@ -49,7 +47,6 @@ enum KeychainService {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
-
         return SecItemDelete(query as CFDictionary) == errSecSuccess
     }
 }

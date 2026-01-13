@@ -1,17 +1,16 @@
 
-
 //  HomeView.swift
 //  Stadium Sight Words
-//
 
 import SwiftUI
 
 struct HomeView: View {
 
-    private let columns: [GridItem] = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16)
-    ]
+    @EnvironmentObject private var auth: AuthStore
+    @EnvironmentObject private var settings: SettingsStore
+
+    private let spacing: CGFloat = 16
+    private let sidePadding: CGFloat = 16
 
     var body: some View {
         NavigationView {
@@ -20,28 +19,53 @@ struct HomeView: View {
                     .ignoresSafeArea()
 
                 VStack(spacing: 14) {
+                    topBar
                     header
+                    difficultyPicker
 
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(SportType.allCases) { sport in
-                            NavigationLink(destination: PracticeView(sport: sport)) {
-                                SportTile(
-                                    title: "\(sport.displayName) Practice",
-                                    subtitle: "Tap to start",
-                                    assetName: assetName(for: sport)
-                                )
+                    GeometryReader { geo in
+                        let tileWidth = (geo.size.width - spacing) / 2
+
+                        VStack(spacing: spacing) {
+
+                            HStack(spacing: spacing) {
+                                NavigationLink(destination: LazyView { PracticeView(sport: .soccer) }) {
+                                    SportTile(title: "Soccer Practice", subtitle: "Tap to start", assetName: "soccer_icon")
+                                }
+                                .buttonStyle(.plain)
+                                .frame(width: tileWidth)
+
+                                NavigationLink(destination: LazyView { PracticeView(sport: .basketball) }) {
+                                    SportTile(title: "Basketball Practice", subtitle: "Tap to start", assetName: "basketball_icon")
+                                }
+                                .buttonStyle(.plain)
+                                .frame(width: tileWidth)
                             }
-                            .buttonStyle(.plain)
+
+                            HStack {
+                                Spacer()
+
+                                NavigationLink(destination: LazyView { PracticeView(sport: .football) }) {
+                                    SportTile(title: "Football Practice", subtitle: "Tap to start", assetName: "football_icon")
+                                }
+                                .buttonStyle(.plain)
+                                .frame(width: tileWidth)
+
+                                Spacer()
+                            }
+
+                            Spacer(minLength: 0)
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, sidePadding)
                     .padding(.top, 6)
 
                     Spacer()
 
-                    Text("Tip: Short sessions win. 5 minutes is plenty.")
-                        .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.8))
+                    Text("Tip: Easy = more time. Hard = faster memory.")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.85))
                         .padding(.bottom, 12)
                 }
                 .padding(.top, 8)
@@ -51,12 +75,45 @@ struct HomeView: View {
         .navigationViewStyle(.stack)
     }
 
+    // MARK: - Top Bar
+
+    private var topBar: some View {
+        HStack {
+            Text(auth.currentUsername.isEmpty ? "Player" : auth.currentUsername)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.9))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.white.opacity(0.16), in: Capsule())
+
+            Spacer()
+
+            Button {
+                auth.logout()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                    Text("Logout")
+                }
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.black.opacity(0.25), in: Capsule())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+    }
+
+    // MARK: - Header
+
     private var header: some View {
         VStack(spacing: 10) {
             Text("Stadium")
                 .font(.system(size: 44, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
-                .padding(.top, 8)
+                .padding(.top, 4)
 
             Text("Sight Words")
                 .font(.system(size: 34, weight: .heavy, design: .rounded))
@@ -70,16 +127,27 @@ struct HomeView: View {
                 .background(.ultraThinMaterial, in: Capsule())
         }
         .padding(.horizontal, 16)
-        .padding(.top, 10)
+        .padding(.top, 4)
     }
 
-    // Uses YOUR asset names from Assets.xcassets
-    private func assetName(for sport: SportType) -> String {
-        switch sport {
-        case .soccer: return "soccer_icon"
-        case .basketball: return "basketball_icon"
-        case .football: return "football_icon"
+    // MARK: - Difficulty Picker
+
+    private var difficultyPicker: some View {
+        VStack(spacing: 8) {
+            Text("Difficulty")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.white.opacity(0.9))
+
+            Picker("Difficulty", selection: $settings.difficulty) {
+                ForEach(Difficulty.allCases) { d in
+                    Text("\(d.displayName) (\(d.secondsVisible, specifier: "%.1f")s)")
+                        .tag(d)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 18)
         }
+        .padding(.top, 2)
     }
 }
 
@@ -122,7 +190,7 @@ private struct SportTile: View {
             }
             .padding(14)
         }
-        .aspectRatio(1, contentMode: .fit) // makes each card a square
+        .aspectRatio(1, contentMode: .fit)
         .onAppear {
             bounce = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -169,4 +237,3 @@ private struct StarsOverlay: View {
         }
     }
 }
-
