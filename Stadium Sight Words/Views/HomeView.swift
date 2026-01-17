@@ -12,6 +12,8 @@ struct HomeView: View {
     private let spacing: CGFloat = 16
     private let sidePadding: CGFloat = 16
 
+    @State private var showAccount: Bool = false
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -28,6 +30,7 @@ struct HomeView: View {
 
                         VStack(spacing: spacing) {
 
+                            // Row 1: Soccer + Basketball
                             HStack(spacing: spacing) {
                                 NavigationLink(destination: LazyView { PracticeView(sport: .soccer) }) {
                                     SportTile(title: "Soccer Practice", subtitle: "Tap to start", assetName: "soccer_icon")
@@ -42,6 +45,7 @@ struct HomeView: View {
                                 .frame(width: tileWidth)
                             }
 
+                            // Row 2: Football centered
                             HStack {
                                 Spacer()
 
@@ -71,6 +75,9 @@ struct HomeView: View {
                 .padding(.top, 8)
             }
             .navigationBarHidden(true)
+            .sheet(isPresented: $showAccount) {
+                AccountView()
+            }
         }
         .navigationViewStyle(.stack)
     }
@@ -89,18 +96,16 @@ struct HomeView: View {
             Spacer()
 
             Button {
-                auth.logout()
+                showAccount = true
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                    Text("Logout")
-                }
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.black.opacity(0.25), in: Capsule())
+                Image(systemName: "gearshape.fill")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.25), in: Capsule())
             }
+            .accessibilityLabel("Account settings")
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)
@@ -130,7 +135,7 @@ struct HomeView: View {
         .padding(.top, 4)
     }
 
-    // MARK: - Difficulty Picker
+    // MARK: - Difficulty Picker (restored)
 
     private var difficultyPicker: some View {
         VStack(spacing: 8) {
