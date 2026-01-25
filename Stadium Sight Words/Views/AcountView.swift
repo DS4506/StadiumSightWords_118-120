@@ -9,8 +9,8 @@ struct AccountView: View {
     @State private var showChangeEmail = false
     @State private var showChangePassword = false
     @State private var showLogoutConfirm = false
+    @State private var showMyItems = false
 
-    // Sheets input
     @State private var currentPassword = ""
     @State private var newUsername = ""
     @State private var newEmail = ""
@@ -19,55 +19,85 @@ struct AccountView: View {
     @State private var statusMessage = ""
 
     var body: some View {
-        ZStack {
-            background
+        NavigationView {
+            ZStack {
+                background
 
-            VStack(spacing: 16) {
-                topRow
-                headerCard
+                VStack(spacing: 16) {
+                    topRow
+                    headerCard
 
-                VStack(spacing: 12) {
-                    ActionCardButton(
-                        icon: "person.fill",
-                        title: "Change Username",
-                        subtitle: "Update your player name",
-                        systemColor: .blue
-                    ) { openChangeUsername() }
+                    VStack(spacing: 12) {
+                        ActionCardButton(
+                            icon: "person.fill",
+                            title: "Change Username",
+                            subtitle: "Update your player name",
+                            color: .blue
+                        ) {
+                            statusMessage = ""
+                            currentPassword = ""
+                            newUsername = ""
+                            showChangeUsername = true
+                        }
 
-                    ActionCardButton(
-                        icon: "envelope.fill",
-                        title: "Change Email",
-                        subtitle: "Update your email address",
-                        systemColor: .purple
-                    ) { openChangeEmail() }
+                        ActionCardButton(
+                            icon: "envelope.fill",
+                            title: "Change Email",
+                            subtitle: "Update your email address",
+                            color: .purple
+                        ) {
+                            statusMessage = ""
+                            newEmail = auth.email
+                            showChangeEmail = true
+                        }
 
-                    ActionCardButton(
-                        icon: "lock.fill",
-                        title: "Change Password",
-                        subtitle: "Reset your password",
-                        systemColor: .green
-                    ) { openChangePassword() }
+                        ActionCardButton(
+                            icon: "lock.fill",
+                            title: "Change Password",
+                            subtitle: "Reset your password",
+                            color: .green
+                        ) {
+                            statusMessage = ""
+                            currentPassword = ""
+                            newPassword = ""
+                            showChangePassword = true
+                        }
 
-                    ActionCardButton(
-                        icon: "rectangle.portrait.and.arrow.right",
-                        title: "Logout",
-                        subtitle: "Return to login screen",
-                        systemColor: .red
-                    ) { showLogoutConfirm = true }
+                        // ✅ Core Data assignment screen
+                        NavigationLink(destination: ContentView()) {
+                            ActionCardRow(
+                                icon: "tray.full.fill",
+                                title: "My Items (Core Data)",
+                                subtitle: "Add/delete items and show persistence",
+                                color: .orange
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        ActionCardButton(
+                            icon: "rectangle.portrait.and.arrow.right",
+                            title: "Logout",
+                            subtitle: "Return to login screen",
+                            color: .red
+                        ) {
+                            showLogoutConfirm = true
+                        }
+                    }
+                    .padding(.horizontal, 18)
+
+                    if !statusMessage.isEmpty {
+                        Text(statusMessage)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 18)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 18)
-
-                if !statusMessage.isEmpty {
-                    Text(statusMessage)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 18)
-                        .multilineTextAlignment(.center)
-                }
-
-                Spacer(minLength: 0)
+                .padding(.top, 12)
             }
-            .padding(.top, 12)
+            .navigationBarHidden(true)
         }
         .confirmationDialog("Logout?", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
             Button("Logout", role: .destructive) {
@@ -150,28 +180,6 @@ struct AccountView: View {
         .padding(.horizontal, 18)
     }
 
-    // MARK: - Actions
-
-    private func openChangeUsername() {
-        statusMessage = ""
-        currentPassword = ""
-        newUsername = ""
-        showChangeUsername = true
-    }
-
-    private func openChangeEmail() {
-        statusMessage = ""
-        newEmail = auth.email
-        showChangeEmail = true
-    }
-
-    private func openChangePassword() {
-        statusMessage = ""
-        currentPassword = ""
-        newPassword = ""
-        showChangePassword = true
-    }
-
     // MARK: - Sheets
 
     private var changeUsernameSheet: some View {
@@ -220,43 +228,54 @@ struct AccountView: View {
     }
 }
 
-// MARK: - Components (inside same file)
+// MARK: - Components
 
 private struct ActionCardButton: View {
     let icon: String
     let title: String
     let subtitle: String
-    let systemColor: Color
+    let color: Color
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.title2.weight(.bold))
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
-                    .background(systemColor.opacity(0.9), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.headline.weight(.heavy))
-                        .foregroundColor(.black.opacity(0.85))
-                    Text(subtitle)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.black.opacity(0.55))
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .foregroundColor(.black.opacity(0.35))
-            }
-            .padding(14)
-            .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 6)
+            ActionCardRow(icon: icon, title: title, subtitle: subtitle, color: color)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ActionCardRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.title2.weight(.bold))
+                .foregroundColor(.white)
+                .frame(width: 44, height: 44)
+                .background(color.opacity(0.9), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline.weight(.heavy))
+                    .foregroundColor(.black.opacity(0.85))
+                Text(subtitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.black.opacity(0.55))
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .foregroundColor(.black.opacity(0.35))
+        }
+        .padding(14)
+        .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 6)
     }
 }
 

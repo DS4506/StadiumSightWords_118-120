@@ -6,8 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		4772D88A2F2579EC008F70F8 /* Stadium_Sight_Words.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 4772D8882F2579EC008F70F8 /* Stadium_Sight_Words.xcdatamodeld */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		470454992EF0FABC008F5946 /* Stadium Sight Words.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Stadium Sight Words.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		4772D8892F2579EC008F70F8 /* Stadium_Sight_Words.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Stadium_Sight_Words.xcdatamodel; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -32,6 +37,7 @@
 		470454902EF0FABC008F5946 = {
 			isa = PBXGroup;
 			children = (
+				4772D8882F2579EC008F70F8 /* Stadium_Sight_Words.xcdatamodeld */,
 				4704549B2EF0FABC008F5946 /* Stadium Sight Words */,
 				4704549A2EF0FABC008F5946 /* Products */,
 			);
@@ -119,6 +125,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4772D88A2F2579EC008F70F8 /* Stadium_Sight_Words.xcdatamodeld in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -332,6 +339,19 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCVersionGroup section */
+		4772D8882F2579EC008F70F8 /* Stadium_Sight_Words.xcdatamodeld */ = {
+			isa = XCVersionGroup;
+			children = (
+				4772D8892F2579EC008F70F8 /* Stadium_Sight_Words.xcdatamodel */,
+			);
+			currentVersion = 4772D8892F2579EC008F70F8 /* Stadium_Sight_Words.xcdatamodel */;
+			path = Stadium_Sight_Words.xcdatamodeld;
+			sourceTree = "<group>";
+			versionGroupType = wrapper.xcdatamodel;
+		};
+/* End XCVersionGroup section */
 	};
 	rootObject = 470454912EF0FABC008F5946 /* Project object */;
 }
