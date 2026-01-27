@@ -1,5 +1,6 @@
 
 import SwiftUI
+import CoreData
 import AVFoundation
 import AudioToolbox
 
@@ -7,55 +8,40 @@ struct PracticeView: View {
     let sport: SportType
 
     @EnvironmentObject private var viewModel: SightWordsViewModel
-    @EnvironmentObject private var scoreStore: ScoreStore
     @EnvironmentObject private var settings: SettingsStore
+    @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
 
-    @State private var sportRounds: [SightWordRound] = []
+    @State private var queue: [SightWordRound] = []
     @State private var currentIndex: Int = 0
 
-    // Memory mode
     @State private var isPromptVisible: Bool = false
     @State private var isLocked: Bool = true
-
-    // Confetti trigger
-    @State private var confettiTrigger: Int = 0
-
-    // Summary
-    @State private var showSummary: Bool = false
-
-    // Prevent early start / repeated start
     @State private var didStart: Bool = false
 
-    // Selection lock
+    @State private var confettiTrigger: Int = 0
+    @State private var showSummary: Bool = false
+
     @State private var selectedOption: String? = nil
 
-    // Text-to-speech
     private let synthesizer = AVSpeechSynthesizer()
 
-    // ✅ Uses selected difficulty (Easy/Normal/Hard)
     private var promptVisibleSeconds: Double { settings.difficulty.secondsVisible }
 
-    private let nextRoundDelay: Double = 0.7
+    // Replay rule: wrong words get re-added later in the same session
+    private let replayDelayInsertOffset: Int = 3
+    private let maxReplaysPerWord: Int = 2
+    @State private var replayCount: [UUID: Int] = [:]
 
     private var currentRound: SightWordRound? {
-        guard currentIndex >= 0, currentIndex < sportRounds.count else { return nil }
-        return sportRounds[currentIndex]
-    }
-
-    private var roundNumberText: String {
-        let total = max(sportRounds.count, 1)
-        return "\(min(currentIndex + 1, total)) / \(total)"
+        guard currentIndex >= 0, currentIndex < queue.count else { return nil }
+        return queue[currentIndex]
     }
 
     var body: some View {
         ZStack {
-            SportBackgroundView(sport: sport)
-                .ignoresSafeArea()
-
-            ConfettiBurstView(trigger: confettiTrigger)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
+            SportBackgroundView(sport: sport).ignoresSafeArea()
+            ConfettiBurstView(trigger: confettiTrigger).ignoresSafeArea().allowsHitTesting(false)
 
             VStack(spacing: 16) {
                 header
@@ -69,33 +55,18 @@ struct PracticeView: View {
 
                     Spacer(minLength: 0)
                 } else {
-                    VStack(spacing: 12) {
-                        Text("No rounds found")
-                            .font(.title2.weight(.semibold))
-                            .foregroundStyle(.white)
-
-                        Text("Check that SightWords.json has \(sport.displayName) rounds.")
-                            .font(.body)
-                            .foregroundStyle(.white.opacity(0.9))
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
+                    Text("Loading…")
+                        .foregroundColor(.white)
                     Spacer()
                 }
             }
             .padding(.top, 12)
         }
-        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Back") { dismiss() }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("End") { endSessionAndShowSummary() }
-            }
+            ToolbarItem(placement: .topBarLeading) { Button("Back") { dismiss() } }
+            ToolbarItem(placement: .topBarTrailing) { Button("End") { endSession() } }
         }
         .onAppear {
-            // ✅ Start ONLY after the screen is actually visible
             if !didStart {
                 didStart = true
                 startSessionAfterScreenShows()
@@ -118,147 +89,71 @@ struct PracticeView: View {
         }
     }
 
-    // MARK: - Header
-
     private var header: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             Text("\(sport.displayName) Practice")
                 .font(.title2.weight(.heavy))
-                .foregroundStyle(.white)
-                .shadow(radius: 8)
-
-            HStack(spacing: 10) {
-                statPill(title: "Score", value: "\(viewModel.score)")
-                statPill(title: "Streak", value: "\(viewModel.streak)")
-                statPill(title: "Round", value: roundNumberText)
-
-                Button {
-                    speakCurrentWord()
-                } label: {
-                    Image(systemName: "speaker.wave.2.fill")
-                        .foregroundStyle(.white)
-                        .padding(10)
-                        .background(.white.opacity(0.16), in: Circle())
-                }
-                .accessibilityLabel("Hear the word")
-            }
+                .foregroundColor(.white)
 
             Text("Difficulty: \(settings.difficulty.displayName) (\(promptVisibleSeconds, specifier: "%.1f")s)")
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundColor(.white.opacity(0.85))
         }
         .padding(.horizontal, 18)
         .padding(.top, 6)
     }
 
-    private func statPill(title: String, value: String) -> some View {
-        VStack(spacing: 2) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .opacity(0.9)
-            Text(value)
-                .font(.headline.weight(.bold))
-        }
-        .foregroundStyle(.white)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity)
-        .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.white.opacity(0.18), lineWidth: 1)
-        )
-    }
-
-    // MARK: - Prompt
-
     private func promptCard(round: SightWordRound) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.white.opacity(0.18))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(.white.opacity(0.22), lineWidth: 1)
-                )
-
+            RoundedRectangle(cornerRadius: 22).fill(.white.opacity(0.18))
             VStack(spacing: 10) {
-                Text("Listen + Look")
+                Text(isPromptVisible ? round.promptWord : " ")
+                    .font(.system(size: 56, weight: .heavy, design: .rounded))
+                    .foregroundColor(.white)
+                    .opacity(isPromptVisible ? 1 : 0)
+                Text(isLocked ? "Get ready…" : "Pick it from memory!")
+                    .foregroundColor(.white.opacity(0.9))
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.92))
-
-                ZStack {
-                    Text(round.promptWord)
-                        .font(.system(size: 56, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                        .opacity(isPromptVisible ? 1 : 0)
-                        .animation(.easeInOut(duration: 0.25), value: isPromptVisible)
-
-                    Text("...")
-                        .font(.system(size: 48, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .opacity(isPromptVisible ? 0 : 1)
-                        .animation(.easeInOut(duration: 0.25), value: isPromptVisible)
-                }
-
-                Text(isLocked ? "Get ready…" : "Now pick it from memory!")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.92))
             }
-            .padding(.vertical, 18)
-            .padding(.horizontal, 16)
+            .padding()
         }
-        .frame(maxWidth: .infinity)
+        .frame(height: 150)
     }
 
-    // MARK: - Options
-
     private func optionsGrid(round: SightWordRound) -> some View {
-        let columns = [
-            GridItem(.flexible(), spacing: 12),
-            GridItem(.flexible(), spacing: 12)
-        ]
-
-        return LazyVGrid(columns: columns, spacing: 12) {
+        let cols = [GridItem(.flexible()), GridItem(.flexible())]
+        return LazyVGrid(columns: cols, spacing: 12) {
             ForEach(round.options, id: \.self) { option in
                 Button {
                     choose(option, round: round)
                 } label: {
-                    optionTile(title: option)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 18).fill(Color.white.opacity(0.92))
+                        Text(option)
+                            .font(.title3.weight(.heavy))
+                            .foregroundColor(.black.opacity(0.85))
+                    }
+                    .frame(height: 78)
                 }
                 .disabled(isLocked || selectedOption != nil)
             }
         }
     }
 
-    private func optionTile(title: String) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.92))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(.black.opacity(0.08), lineWidth: 1)
-                )
-
-            Text(title)
-                .font(.title3.weight(.heavy))
-                .foregroundStyle(.black.opacity(0.85))
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
-                .padding(.horizontal, 10)
-        }
-        .frame(height: 78)
-    }
-
-    // MARK: - Session timing (fixed)
+    // MARK: - Session Start
 
     private func startSessionAfterScreenShows() {
         viewModel.resetSession()
-        sportRounds = viewModel.rounds(for: sport).shuffled()
+
+        let rounds = viewModel.rounds(for: sport).shuffled()
+        queue = rounds
+
         currentIndex = 0
+        replayCount = [:]
         selectedOption = nil
 
-        // ✅ Delay so navigation transition finishes BEFORE audio
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            startMemoryTimerForCurrentRound()
+            startRound()
         }
     }
 
@@ -267,17 +162,15 @@ struct PracticeView: View {
         startSessionAfterScreenShows()
     }
 
-    private func startMemoryTimerForCurrentRound() {
-        guard currentRound != nil else { return }
+    private func startRound() {
+        guard currentRound != nil else { endSession(); return }
 
         isLocked = true
         isPromptVisible = true
         selectedOption = nil
 
-        // Speak AFTER the screen appears
         speakCurrentWord()
 
-        // Hide after difficulty time
         DispatchQueue.main.asyncAfter(deadline: .now() + promptVisibleSeconds) {
             withAnimation(.easeInOut(duration: 0.25)) {
                 isPromptVisible = false
@@ -289,67 +182,98 @@ struct PracticeView: View {
     private func speakCurrentWord() {
         guard let round = currentRound else { return }
         synthesizer.stopSpeaking(at: .immediate)
-
-        let utterance = AVSpeechUtterance(string: round.promptWord)
-        utterance.rate = 0.48
-        utterance.pitchMultiplier = 1.08
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-
-        synthesizer.speak(utterance)
+        let u = AVSpeechUtterance(string: round.promptWord)
+        u.rate = 0.48
+        u.pitchMultiplier = 1.08
+        u.voice = AVSpeechSynthesisVoice(language: "en-US")
+        synthesizer.speak(u)
     }
+
+    // MARK: - Answer
 
     private func choose(_ option: String, round: SightWordRound) {
         guard !isLocked else { return }
-
         selectedOption = option
+
         let correct = viewModel.submitAnswer(option, for: round)
 
+        // Save every attempt to Core Data
+        savePracticeResult(word: round.promptWord, wasCorrect: correct)
+
         if correct {
-            AudioServicesPlaySystemSound(1104)
             confettiTrigger += 1
+            AudioServicesPlaySystemSound(1104)
         } else {
             AudioServicesPlaySystemSound(1053)
+            requeueIfAllowed(round)
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + nextRoundDelay) {
-            goToNextRoundOrEnd()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            advance()
         }
     }
 
-    private func goToNextRoundOrEnd() {
+    // Wrong answers come back later in the same session
+    private func requeueIfAllowed(_ round: SightWordRound) {
+        let count = replayCount[round.id, default: 0]
+        guard count < maxReplaysPerWord else { return }
+        replayCount[round.id] = count + 1
+
+        let insertIndex = min(currentIndex + replayDelayInsertOffset, queue.count)
+        queue.insert(round, at: insertIndex)
+    }
+
+    private func advance() {
         selectedOption = nil
 
-        if currentIndex + 1 < sportRounds.count {
+        if currentIndex + 1 < queue.count {
             currentIndex += 1
-
-            // Smooth reset into next round
-            isPromptVisible = false
-            isLocked = true
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                startMemoryTimerForCurrentRound()
-            }
+            startRound()
         } else {
-            endSessionAndShowSummary()
+            endSession()
         }
     }
 
-    private func endSessionAndShowSummary() {
-        saveSessionToHistory()
+    // MARK: - End Session
+
+    private func endSession() {
+        saveSessionSummary()
         showSummary = true
         isLocked = true
     }
 
-    private func saveSessionToHistory() {
-        let record = SportSessionRecord(
-            sport: sport,
-            score: viewModel.score,
-            totalAnswered: viewModel.totalAnswered,
-            correctCount: viewModel.correctCount,
-            incorrectCount: viewModel.incorrectCount,
-            accuracyPercent: viewModel.accuracyPercent,
-            bestStreak: viewModel.bestStreak
-        )
-        scoreStore.addSession(record)
+    // MARK: - Core Data Writes
+
+    private func savePracticeResult(word: String, wasCorrect: Bool) {
+        let r = PracticeResult(context: viewContext)
+        r.id = UUID()
+        r.sport = sport.rawValue
+        r.word = word
+        r.wasCorrect = wasCorrect
+        r.timestamp = Date()
+
+        do {
+            try viewContext.save()
+        } catch {
+            print("Failed to save PracticeResult: \(error.localizedDescription)")
+        }
+    }
+
+    private func saveSessionSummary() {
+        let s = SessionSummary(context: viewContext)
+        s.id = UUID()
+        s.sport = sport.rawValue
+        s.score = Int64(viewModel.score)
+        s.correctCount = Int64(viewModel.correctCount)
+        s.incorrectCount = Int64(viewModel.incorrectCount)
+        s.accuracyPercent = Int64(viewModel.accuracyPercent)
+        s.bestStreak = Int64(viewModel.bestStreak)
+        s.timestamp = Date()
+
+        do {
+            try viewContext.save()
+        } catch {
+            print("Failed to save SessionSummary: \(error.localizedDescription)")
+        }
     }
 }

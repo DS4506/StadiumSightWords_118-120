@@ -13,6 +13,7 @@ struct HomeView: View {
     private let sidePadding: CGFloat = 16
 
     @State private var showAccount: Bool = false
+    @State private var showProgress: Bool = false
 
     var body: some View {
         NavigationView {
@@ -78,6 +79,9 @@ struct HomeView: View {
             .sheet(isPresented: $showAccount) {
                 AccountView()
             }
+            .sheet(isPresented: $showProgress) {
+                ProgressDashboardView()
+            }
         }
         .navigationViewStyle(.stack)
     }
@@ -85,7 +89,7 @@ struct HomeView: View {
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack {
+        HStack(spacing: 10) {
             Text(auth.currentUsername.isEmpty ? "Player" : auth.currentUsername)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.9))
@@ -94,6 +98,22 @@ struct HomeView: View {
                 .background(.white.opacity(0.16), in: Capsule())
 
             Spacer()
+
+            // ✅ Progress button in the center (Home screen dashboard)
+            Button {
+                showProgress = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chart.bar.fill")
+                    Text("Progress")
+                }
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.black.opacity(0.25), in: Capsule())
+            }
+            .accessibilityLabel("Progress dashboard")
 
             Button {
                 showAccount = true
@@ -135,7 +155,7 @@ struct HomeView: View {
         .padding(.top, 4)
     }
 
-    // MARK: - Difficulty Picker (restored)
+    // MARK: - Difficulty Picker
 
     private var difficultyPicker: some View {
         VStack(spacing: 8) {
