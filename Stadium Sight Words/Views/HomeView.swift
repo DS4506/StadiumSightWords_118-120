@@ -23,15 +23,18 @@ struct HomeView: View {
 
                 VStack(spacing: 14) {
                     topBar
+
                     header
-                    difficultyPicker
+                        .padding(.top, 6)
+
+                    difficultySection
+                        .padding(.top, 4)
 
                     GeometryReader { geo in
                         let tileWidth = (geo.size.width - spacing) / 2
 
                         VStack(spacing: spacing) {
 
-                            // Row 1: Soccer + Basketball
                             HStack(spacing: spacing) {
                                 NavigationLink(destination: LazyView { PracticeView(sport: .soccer) }) {
                                     SportTile(title: "Soccer Practice", subtitle: "Tap to start", assetName: "soccer_icon")
@@ -46,7 +49,6 @@ struct HomeView: View {
                                 .frame(width: tileWidth)
                             }
 
-                            // Row 2: Football centered
                             HStack {
                                 Spacer()
 
@@ -64,7 +66,7 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
                     .padding(.horizontal, sidePadding)
-                    .padding(.top, 6)
+                    .padding(.top, 4)
 
                     Spacer()
 
@@ -92,14 +94,13 @@ struct HomeView: View {
         HStack(spacing: 10) {
             Text(auth.currentUsername.isEmpty ? "Player" : auth.currentUsername)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(.white.opacity(0.92))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(.white.opacity(0.16), in: Capsule())
 
             Spacer()
 
-            // ✅ Progress button in the center (Home screen dashboard)
             Button {
                 showProgress = true
             } label: {
@@ -113,7 +114,6 @@ struct HomeView: View {
                 .padding(.vertical, 8)
                 .background(.black.opacity(0.25), in: Capsule())
             }
-            .accessibilityLabel("Progress dashboard")
 
             Button {
                 showAccount = true
@@ -125,43 +125,49 @@ struct HomeView: View {
                     .padding(.vertical, 8)
                     .background(.black.opacity(0.25), in: Capsule())
             }
-            .accessibilityLabel("Account settings")
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)
     }
 
-    // MARK: - Header
+    // MARK: - Header (glow + sparkles + shine)
 
     private var header: some View {
         VStack(spacing: 10) {
-            Text("Stadium")
-                .font(.system(size: 44, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
-                .padding(.top, 4)
+            ZStack {
+                TitleGlowView()
+                    .frame(height: 84)
+                    .padding(.horizontal, 16)
+                    .allowsHitTesting(false)
 
-            Text("Sight Words")
-                .font(.system(size: 34, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
+                // ✅ Title with a shine sweep layered on top
+                ShineTitleText(
+                    text: "Stadium Sight Words",
+                    fontSize: 44,
+                    weight: .heavy
+                )
+                .padding(.horizontal, 16)
+            }
 
             Text("Pick a sport and score points by reading!")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(.white.opacity(0.92))
                 .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .padding(.vertical, 9)
                 .background(.ultraThinMaterial, in: Capsule())
+                .padding(.top, 2)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 4)
     }
 
-    // MARK: - Difficulty Picker
+    // MARK: - Difficulty
 
-    private var difficultyPicker: some View {
+    private var difficultySection: some View {
         VStack(spacing: 8) {
             Text("Difficulty")
                 .font(.headline.weight(.bold))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(.top, 2)
 
             Picker("Difficulty", selection: $settings.difficulty) {
                 ForEach(Difficulty.allCases) { d in
@@ -172,11 +178,106 @@ struct HomeView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, 18)
         }
-        .padding(.top, 2)
     }
 }
 
-// MARK: - Square tile
+// MARK: - Shine Title Text
+
+private struct ShineTitleText: View {
+    let text: String
+    let fontSize: CGFloat
+    let weight: Font.Weight
+
+    @State private var shineX: CGFloat = -220
+
+    var body: some View {
+        // Base title
+        let title = Text(text)
+            .font(.system(size: fontSize, weight: weight, design: .rounded))
+            .foregroundStyle(.white)
+            .minimumScaleFactor(0.75)
+            .lineLimit(1)
+
+        return ZStack {
+            title
+                .shadow(color: .white.opacity(0.18), radius: 10, x: 0, y: 6)
+
+            // Shine layer
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.0),
+                            Color.white.opacity(0.55),
+                            Color.white.opacity(0.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 160, height: 90)
+                .rotationEffect(.degrees(18))
+                .offset(x: shineX, y: 0)
+                .blendMode(.screen)
+                .mask(title) // shine only shows inside the text
+                .allowsHitTesting(false)
+        }
+        .onAppear {
+            // Gentle looping sweep
+            withAnimation(.linear(duration: 2.4).repeatForever(autoreverses: false)) {
+                shineX = 220
+            }
+        }
+    }
+}
+
+// MARK: - Title Glow + Sparkles
+
+private struct TitleGlowView: View {
+    @State private var pulse = false
+    @State private var floatUp = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.white.opacity(0.10))
+                .blur(radius: 18)
+                .scaleEffect(pulse ? 1.08 : 0.98)
+                .opacity(pulse ? 0.9 : 0.55)
+                .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: pulse)
+
+            SparkleDot(size: 26, opacity: 0.35)
+                .offset(x: -120, y: floatUp ? -10 : 6)
+                .animation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: floatUp)
+
+            SparkleDot(size: 18, opacity: 0.28)
+                .offset(x: 130, y: floatUp ? 8 : -8)
+                .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: floatUp)
+
+            SparkleDot(size: 14, opacity: 0.22)
+                .offset(x: 60, y: floatUp ? -14 : 0)
+                .animation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true), value: floatUp)
+        }
+        .onAppear {
+            pulse = true
+            floatUp = true
+        }
+    }
+}
+
+private struct SparkleDot: View {
+    let size: CGFloat
+    let opacity: Double
+
+    var body: some View {
+        Image(systemName: "sparkles")
+            .font(.system(size: size))
+            .foregroundStyle(.white.opacity(opacity))
+            .shadow(color: .white.opacity(0.18), radius: 10, x: 0, y: 6)
+    }
+}
+
+// MARK: - Sport Tile
 
 private struct SportTile: View {
     let title: String
